@@ -1,116 +1,204 @@
-"""
-    Bot functions to generate and post a comments.
-    Instructions to file with comments:
-        one line - one comment.
-    Example:
-        lol
-        kek
-"""
-from tqdm import tqdm
+const Client = require('instagram-private-api').V1;
+	const delay = require('delay');
+	const chalk = require('chalk');
+	const _ = require('lodash');
+	const rp = require('request-promise');
+	const S = require('string');
+	const inquirer = require('inquirer');
+	
 
+	const User = [
+	{
+		type:'input',
+		name:'username',
+		message:'[>] Insert Username:',
+		validate: function(value){
+			if(!value) return 'Can\'t Empty';
+			return true;
+		}
+	},
+	{
+		type:'password',
+		name:'password',
+		message:'[>] Insert Password:',
+		mask:'*',
+		validate: function(value){
+			if(!value) return 'Can\'t Empty';
+			return true;
+		}
+	},
+	{
+	  type:'input',
+	  name:'target',
+	  message:'[>] Insert Username Target (Without @[at]):',
+	  validate: function(value){
+	    if(!value) return 'Can\'t Empty';
+	    return true;
+	  }
+	},
+	{
+	  type:'input',
+	  name:'text',
+	  message:'[>] Insert Text Comment (Use [|] if more than 1):',
+	  validate: function(value){
+	    if(!value) return 'Can\'t Empty';
+	    return true;
+	  }
+	},
+	{
+	  type:'input',
+	  name:'mysyntx',
+	  message:'[>] Input Total of Target You Want (ITTYW):',
+	  validate: function(value){
+	    value = value.match(/[0-9]/);
+	    if (value) return true;
+	    return 'Use Number Only!';
+	  }
+	},
+	{
+	  type:'input',
+	  name:'sleep',
+	  message:'[>] Insert Sleep (MiliSeconds):',
+	  validate: function(value){
+	    value = value.match(/[0-9]/);
+	    if (value) return true;
+	    return 'Delay is number';
+	  }
+	}
+	]
+	
 
-def comment(self, media_id, comment_text):
-    if self.is_commented(media_id):
-        return True
-    if not self.reached_limit('comments'):
-        if self.blocked_actions['comments']:
-            self.logger.warning('YOUR `COMMENT` ACTION IS BLOCKED')
-            if self.blocked_actions_protection:
-                from datetime import timedelta
-                next_reset = (self.start_time.date() + timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
-                self.logger.warning('blocked_actions_protection ACTIVE. Skipping `comment` action till, at least, {}.'.format(next_reset))
-                return False
-        self.delay('comment')
-        _r = self.api.comment(media_id, comment_text)
-        if _r == 'feedback_required':
-            self.logger.error("`Comment` action has been BLOCKED...!!!")
-            return False
-        if _r:
-            self.total['comments'] += 1
-            return True
-    else:
-        self.logger.info("Out of comments for today.")
-    return False
+	const Login = async function(User){
+	
 
+		const Device = new Client.Device(User.username);
+		const Storage = new Client.CookieMemoryStorage();
+		const session = new Client.Session(Device, Storage);
+	
 
-def reply_to_comment(self, media_id, comment_text, parent_comment_id):
-    if not self.is_commented(media_id):
-        self.logger.info("Media is not commented yet, nothing to answer to...")
-        return False
-    if not self.reached_limit('comments'):
-        if self.blocked_actions['comments']:
-            self.logger.warning('YOUR `COMMENT` ACTION IS BLOCKED')
-            if self.blocked_actions_protection:
-                self.logger.warning('blocked_actions_protection ACTIVE. Skipping `comment` action.')
-                return False
-        self.delay('comment')
-        if comment_text[0] != '@':
-            self.logger.error("A reply must start with mention, so '@' must be the 1st char, followed by the username you're replying to")
-            return False
-        if comment_text.split(' ')[0][1:] == self.get_username_from_user_id(self.user_id):
-            self.logger.error("You can't reply to yourself")
-            return False
-        _r = self.api.reply_to_comment(media_id, comment_text, parent_comment_id)
-        if _r == 'feedback_required':
-            self.logger.error("`Comment` action has been BLOCKED...!!!")
-            return False
-        if _r:
-            self.logger.info('Replied to comment {} of media {}'.format(parent_comment_id, media_id))
-            self.total['comments'] += 1
-            return True
-    else:
-        self.logger.info("Out of comments for today.")
-    return False
+		try {
+			await Client.Session.create(Device, Storage, User.username, User.password)
+			const account = await session.getAccount();
+			return Promise.resolve({session,account});
+		} catch (err) {
+			return Promise.reject(err);
+		}
+	
 
+	}
+	const Target = async function(username){
+	  const url = 'https://www.instagram.com/'+username+'/'
+	  const option = {
+	    url: url,
+	    method: 'GET'
+	  }
+	  try{
+	    const account = await rp(option);
+	    const data = S(account).between('<script type="text/javascript">window._sharedData = ', ';</script>').s
+	    const json = JSON.parse(data);
+	    if (json.entry_data.ProfilePage[0].graphql.user.is_private) {
+	      return Promise.reject('Target is private Account');
+	    } else {
+	      const id = json.entry_data.ProfilePage[0].graphql.user.id;
+	      const followers = json.entry_data.ProfilePage[0].graphql.user.edge_followed_by.count;
+	      return Promise.resolve({id,followers});
+	    }
+	  } catch (err){
+	    return Promise.reject(err);
+	  }
+	
 
-def comment_medias(self, medias):
-    broken_items = []
-    self.logger.info("Going to comment %d medias." % (len(medias)))
-    for media in tqdm(medias):
-        if not self.is_commented(media):
-            text = self.get_comment()
-            self.logger.info("Commented with text: %s" % text)
-            if not self.comment(media, text):
-                self.delay('comment')
-                broken_items = medias[medias.index(media):]
-                break
-    self.logger.info("DONE: Total commented on %d medias. " %
-                     self.total['comments'])
-    return broken_items
+	}
+	
 
+	const Media = async function(session, id){
+		const Media = new Client.Feed.UserMedia(session, id);
+	
 
-def comment_hashtag(self, hashtag, amount=None):
-    self.logger.info("Going to comment medias by %s hashtag" % hashtag)
-    medias = self.get_total_hashtag_medias(hashtag, amount)
-    return self.comment_medias(medias)
+		try {
+			const Poto = [];
+			var cursor;
+				if (cursor) Media.setCursor(cursor);
+				const getPoto = await Media.get();
+				await Promise.all(getPoto.map(async(poto) => {
+					Poto.push({
+						id:poto.id,
+						link:poto.params.webLink
+					});
+				}))
+				cursor = await Media.getCursor()
+			return Promise.resolve(Poto);
+		} catch (err){
+			return Promise.reject(err);
+		}
+	}
+	
 
+	async function ngeComment(session, id, text){
+	  try {
+	    await Client.Comment.create(session, id, text);
+	    return true;
+	  } catch(e){
+	    return false;
+	  }
+	}
+	
 
-def comment_user(self, user_id, amount=None):
-    """ Comments last user_id's medias """
-    if not self.check_user(user_id, filter_closed_acc=True):
-        return False
-    self.logger.info("Going to comment user_%s's feed:" % user_id)
-    user_id = self.convert_to_user_id(user_id)
-    medias = self.get_user_medias(user_id, is_comment=True)
-    if not medias:
-        self.logger.info(
-            "None medias received: account is closed or medias have been filtered.")
-        return False
-    return self.comment_medias(medias[:amount])
+	const Excute = async function(User, TargetUsername, Text, sleep, mysyntx){
+		try {
+			
+			/** TRY TO LOGIN **/
+			console.log('\n');
+			console.log('[?] Try to Login . . .');
+			const doLogin = await Login(User);
+			console.log(chalk`{bold.green [!] Login Succsess!}`);
+	
 
+			/** TRY TO GET ALL MEDIA **/	
+			console.log('[?] Try to get Media . . .')		
+			const getTarget = await Target(TargetUsername);
+			var getMedia = await Media(doLogin.session, getTarget.id);
+			console.log(chalk`{bold.green [!] Succsess to get Media From [${TargetUsername}] }\n`);
+			getMedia = _.chunk(getMedia, mysyntx);
+	
 
-def comment_users(self, user_ids, ncomments=None):
-    for user_id in user_ids:
-        if self.reached_limit('comments'):
-            self.logger.info("Out of comments for today.")
-            return
-        self.comment_user(user_id, amount=ncomments)
-
-
-def comment_geotag(self, geotag):
-    # TODO: comment every media from geotag
-    pass
-
-
-def is_commented(self, media_id):
-    return self.user_id in self.get_media_commenters(media_id)
+			/** TRY TO DELETE ALL MEDIA **/
+			for (let i = 0; i < getMedia.length; i++) {
+				console.log('[?] Try to Like Photo/Delay \n')
+				await Promise.all(getMedia[i].map(async(media) => {
+					var ranText = Text[Math.floor(Math.random() * Text.length)];
+	                const ngeDo = await ngeComment(doLogin.session, media.id, ranText)
+					const PrintOut = chalk`${ngeDo ? chalk`{bold.green Sukses Komen}` : chalk`{bold.red Gagal Komen}`}`
+					console.log(chalk`> ${media.link} => ${PrintOut} [${ranText}]`);
+				}))
+				console.log(chalk`{yellow \n [#][>] Delay For ${sleep} MiliSeconds [<][#] \n}`)
+				    await delay(sleep)
+			}
+	    console.log(chalk`{bold.green [+] Bom Komen Post Succsess}`)
+		} catch (err) {
+			console.log(err);
+		}
+	}
+	console.log(chalk`
+	  {bold.cyan
+	  —————————————————— [INFORMATION] ————————————————————
+	  [?] {bold.green BOM KOMEN POST TARGET *SET SLEEP!}
+	  ——————————————————  [THANKS TO]  ————————————————————
+	  [✓] CODE BY CYBER SCREAMER CCOCOT (ccocot@bc0de.net)
+	  [✓] FIXING & TESTING BY SYNTAX (@officialputu_id)
+	  [✓] CCOCOT.CO | BC0DE.NET | NAONLAH.NET | WingkoColi
+	  [✓] SGB TEAM REBORN | Zerobyte.id | ccocot@bc0de.net 
+	  —————————————————————————————————————————————————————
+	  What's new?
+	  1. Input Target/delay Manual (ITTYW)
+	  —————————————————————————————————————————————————————}
+	      `);
+	//ikiganteng
+	inquirer.prompt(User)
+	.then(answers => {
+	  var text = answers.text.split('|');
+	  Excute({
+	    username:answers.username,
+	    password:answers.password
+	  },answers.target,text,answers.sleep,answers.mysyntx);
+	})
