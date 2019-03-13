@@ -193,7 +193,6 @@ const Client = require('instagram-private-api').V1;
 	  1. Input Target/delay Manual (ITTYW)
 	  —————————————————————————————————————————————————————}
 	      `);
-	//ikiganteng
 	inquirer.prompt(User)
 	.then(answers => {
 	  var text = answers.text.split('|');
