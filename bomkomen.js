@@ -1,14 +1,13 @@
 const Client = require('instagram-private-api').V1;
-	const delay = require('delay');
-	const chalk = require('chalk');
-	const _ = require('lodash');
-	const rp = require('request-promise');
-	const S = require('string');
-	const inquirer = require('inquirer');
+const delay = require('delay');
+const chalk = require('chalk');
+const _ = require('lodash');
+const rp = require('request-promise');
+const S = require('string');
+const inquirer = require('inquirer');
 	
-
-	const User = [
-	{
+const User = [
+{
 		type:'input',
 		name:'username',
 		message:'[>] Insert Username:',
@@ -16,8 +15,8 @@ const Client = require('instagram-private-api').V1;
 			if(!value) return 'Can\'t Empty';
 			return true;
 		}
-	},
-	{
+},
+{
 		type:'password',
 		name:'password',
 		message:'[>] Insert Password:',
@@ -26,17 +25,17 @@ const Client = require('instagram-private-api').V1;
 			if(!value) return 'Can\'t Empty';
 			return true;
 		}
-	},
-	{
-	  type:'input',
-	  name:'target',
-	  message:'[>] Insert Username Target (Without @[at]):',
-	  validate: function(value){
-	    if(!value) return 'Can\'t Empty';
-	    return true;
+},
+{
+ type:'input',
+ name:'target',
+ message:'[>] Insert Username Target (Without @[at]):',
+ validate: function(value){
+     if(!value) return 'Can\'t Empty';
+     return true;
 	  }
-	},
-	{
+},
+{
 	  type:'input',
 	  name:'text',
 	  message:'[>] Insert Text Comment (Use [|] if more than 1):',
@@ -70,13 +69,11 @@ const Client = require('instagram-private-api').V1;
 
 	const Login = async function(User){
 	
-
-		const Device = new Client.Device(User.username);
+                const Device = new Client.Device(User.username);
 		const Storage = new Client.CookieMemoryStorage();
 		const session = new Client.Session(Device, Storage);
 	
-
-		try {
+                try {
 			await Client.Session.create(Device, Storage, User.username, User.password)
 			const account = await session.getAccount();
 			return Promise.resolve({session,account});
@@ -107,14 +104,11 @@ const Client = require('instagram-private-api').V1;
 	    return Promise.reject(err);
 	  }
 	
-
 	}
 	
-
 	const Media = async function(session, id){
 		const Media = new Client.Feed.UserMedia(session, id);
 	
-
 		try {
 			const Poto = [];
 			var cursor;
@@ -193,6 +187,7 @@ const Client = require('instagram-private-api').V1;
 	  1. Input Target/delay Manual (ITTYW)
 	  —————————————————————————————————————————————————————}
 	      `);
+//ikiganteng
 	inquirer.prompt(User)
 	.then(answers => {
 	  var text = answers.text.split('|');
